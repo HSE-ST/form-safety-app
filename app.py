@@ -1,14 +1,12 @@
-# Tambahan untuk fitur penghapusan database manual
-# dan pengiriman email ke Coach sebagai bukti input
-
+# Personal Safety Discussion App
 import streamlit as st
 import pandas as pd
 import os
 from io import BytesIO
 import xlsxwriter
+from PIL import Image
 import smtplib
 from email.message import EmailMessage
-from PIL import Image
 
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
@@ -120,11 +118,10 @@ with st.form("psd_form", clear_on_submit=True):
                 msg['Subject'] = f"Bukti PSD - {tanggal.strftime('%Y-%m-%d')}"
                 msg['From'] = "noreply@formpsd.com"
                 msg['To'] = coach["Email"]
-                msg.set_content(f"Halo {coach['Nama']},\n\nTerima kasih telah melakukan Personal Safety Discussion pada {tanggal.strftime('%d-%m-%Y')} dengan {coachee['Nama']}. Data Anda telah tercatat.\n\nSalam,\nTim HSE")
+                email_body = "\n".join([f"{k}: {v}" for k, v in new_entry.items() if k != "Foto"])
+                msg.set_content(f"Halo {coach['Nama']},\n\nTerima kasih telah melakukan Personal Safety Discussion pada {tanggal.strftime('%d-%m-%Y')} dengan {coachee['Nama']}. Berikut data diskusinya:\n\n{email_body}\n\nSalam,\nTim HSE")
 
-                with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
-                    smtp.starttls()
-                    smtp.login("your_email@gmail.com", "your_password")  # GANTI
+                with smtplib.SMTP('localhost') as smtp:
                     smtp.send_message(msg)
             except Exception as e:
                 st.warning(f"Gagal kirim email ke Coach: {e}")
