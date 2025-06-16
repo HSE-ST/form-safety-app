@@ -1,8 +1,13 @@
+# Tambahan untuk fitur penghapusan database manual
+# dan pengiriman email ke Coach sebagai bukti input
+
 import streamlit as st
 import pandas as pd
 import os
 from io import BytesIO
 import xlsxwriter
+import smtplib
+from email.message import EmailMessage
 from PIL import Image
 
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
@@ -14,12 +19,11 @@ IMAGE_DIR = "uploaded_images"
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
-# Sidebar Login
 if "email" not in st.session_state:
     st.session_state["email"] = ""
 
 with st.sidebar:
-    email_input = st.text_input("🔒 Masukkan email untuk akses dashboard:", value=st.session_state["email"])
+    email_input = st.text_input("🔐 Masukkan email untuk akses dashboard:", value=st.session_state["email"])
     if st.button("Login"):
         st.session_state["email"] = email_input.strip().lower()
 
@@ -27,7 +31,6 @@ email = st.session_state["email"]
 is_authorized = email == AUTHORIZED_EMAIL
 
 st.title("🛡️ Personal Safety Discussion")
-st.markdown("Formulir ini berdasarkan format **OHS/F-138** untuk mendokumentasikan diskusi keselamatan.")
 
 with st.form("psd_form", clear_on_submit=True):
     st.header("📅 Informasi Diskusi")
@@ -52,7 +55,8 @@ with st.form("psd_form", clear_on_submit=True):
             "Nama": st.text_input("Nama Coach"),
             "NIK": st.text_input("NIK Coach"),
             "Jabatan": st.text_input("Jabatan Coach"),
-            "Departemen": st.text_input("Departemen Coach")
+            "Departemen": st.text_input("Departemen Coach"),
+            "Email": st.text_input("Email Coach")
         }
 
     st.header("🗣️ Pertanyaan Pembuka")
@@ -109,34 +113,34 @@ with st.form("psd_form", clear_on_submit=True):
         df_combined.to_csv(DATA_CSV, index=False)
         st.success("Data berhasil disimpan.")
 
-# DASHBOARD UNTUK EMAIL TERTENTU
+        # Kirim email ke Coach (jika diisi)
+        if coach["Email"]:
+            try:
+                msg = EmailMessage()
+                msg['Subject'] = f"Bukti PSD - {tanggal.strftime('%Y-%m-%d')}"
+                msg['From'] = "noreply@formpsd.com"
+                msg['To'] = coach["Email"]
+                msg.set_content(f"Halo {coach['Nama']},\n\nTerima kasih telah melakukan Personal Safety Discussion pada {tanggal.strftime('%d-%m-%Y')} dengan {coachee['Nama']}. Data Anda telah tercatat.\n\nSalam,\nTim HSE")
+
+                with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+                    smtp.starttls()
+                    smtp.login("your_email@gmail.com", "your_password")  # GANTI
+                    smtp.send_message(msg)
+            except Exception as e:
+                st.warning(f"Gagal kirim email ke Coach: {e}")
+
+# Dashboard admin
 if is_authorized:
-    st.header("📊 Dashboard & Rekap")
+    st.header("📊 Dashboard & Manajemen Data")
     if os.path.exists(DATA_CSV):
         df = pd.read_csv(DATA_CSV)
         st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
 
-        def export_excel(df):
-            output = BytesIO()
-            wb = xlsxwriter.Workbook(output, {'in_memory': True})
-            ws = wb.add_worksheet("Rekap")
-
-            headers = list(df.columns)
-            ws.write_row(0, 0, headers)
-
-            for idx, row in df.iterrows():
-                for col_idx, col in enumerate(headers):
-                    if col == "Foto" and os.path.exists(str(row[col])):
-                        ws.insert_image(idx + 1, col_idx, str(row[col]), {"x_scale": 0.3, "y_scale": 0.3})
-                    else:
-                        ws.write(idx + 1, col_idx, str(row[col]))
-            wb.close()
-            output.seek(0)
-            return output
-
-        excel_data = export_excel(df)
-        st.download_button("📥 Unduh Rekap Excel", data=excel_data, file_name="rekap_psd.xlsx")
+        with st.expander("🔧 Hapus semua data?"):
+            if st.button("Hapus data CSV"):
+                os.remove(DATA_CSV)
+                st.success("Data berhasil dihapus.")
     else:
-        st.info("Belum ada data tersimpan.")
+        st.info("Belum ada data.")
 else:
-    st.info("Login dengan email yang berwenang untuk melihat dashboard.")
+    st.info("Login dengan email resmi untuk akses dashboard.")
