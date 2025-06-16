@@ -5,8 +5,6 @@ import os
 from io import BytesIO
 import xlsxwriter
 from PIL import Image
-import smtplib
-from email.message import EmailMessage
 
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
@@ -110,27 +108,19 @@ with st.form("psd_form", clear_on_submit=True):
         df_combined.to_csv(DATA_CSV, index=False)
         st.success("Data berhasil disimpan.")
 
-        # Kirim email ke Coach (jika diisi)
-        if coach["Email"]:
-            try:
-                msg = EmailMessage()
-                msg['Subject'] = f"Bukti PSD - {tanggal.strftime('%Y-%m-%d')}"
-                msg['From'] = "noreply@formpsd.com"
-                msg['To'] = coach["Email"]
-                email_body = "\n".join([f"{k}: {v}" for k, v in new_entry.items() if k != "Foto"])
-                msg.set_content(f"Halo {coach['Nama']},\n\nTerima kasih telah melakukan Personal Safety Discussion pada {tanggal.strftime('%d-%m-%Y')} dengan {coachee['Nama']}. Berikut data diskusinya:\n\n{email_body}\n\nSalam,\nTim HSE")
-
-                with smtplib.SMTP('localhost') as smtp:
-                    smtp.send_message(msg)
-            except Exception as e:
-                st.warning(f"Gagal kirim email ke Coach: {e}")
-
 # Dashboard admin
 if is_authorized:
     st.header("📊 Dashboard & Manajemen Data")
     if os.path.exists(DATA_CSV):
         df = pd.read_csv(DATA_CSV)
         st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
+
+        st.download_button(
+            label="📥 Download data (Excel)",
+            file_name="psd_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            data=create_excel_file(df),
+        )
 
         with st.expander("🔧 Hapus semua data?"):
             if st.button("Hapus data CSV"):
@@ -140,3 +130,28 @@ if is_authorized:
         st.info("Belum ada data.")
 else:
     st.info("Login dengan email resmi untuk akses dashboard.")
+
+def create_excel_file(dataframe):
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Personal Safety")
+
+    worksheet.set_column("A:Z", 20)
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2'})
+    for col_num, value in enumerate(dataframe.columns):
+        worksheet.write(0, col_num, value, header_format)
+
+    for row_num, row in enumerate(dataframe.itertuples(index=False), start=1):
+        for col_num, cell in enumerate(row):
+            if dataframe.columns[col_num] == "Foto" and cell and os.path.exists(cell):
+                worksheet.set_row(row_num, 80)
+                worksheet.insert_image(row_num, col_num, cell, {
+                    'x_scale': 0.2, 'y_scale': 0.2,
+                    'x_offset': 5, 'y_offset': 5
+                })
+            else:
+                worksheet.write(row_num, col_num, str(cell))
+
+    workbook.close()
+    output.seek(0)
+    return output
