@@ -1,133 +1,127 @@
 import streamlit as st
 import pandas as pd
+import os
 import io
 from datetime import datetime
-from PIL import Image
-import base64
+from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as ExcelImage
+from PIL import Image as PILImage
 
-st.set_page_config(page_title="Personal Safety Coaching", layout="centered", page_icon="🦺")
-
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f0f8ff;
-    }
-    .stButton>button {
-        background-color: #2e8b57;
-        color: white;
-    }
-    .stDownloadButton>button {
-        background-color: #4682b4;
-        color: white;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("🦺 Personal Safety Coaching Form")
-
-# Initialize session state
-if 'page' not in st.session_state:
-    st.session_state.page = 0
-
-if 'data' not in st.session_state:
-    st.session_state.data = []
-
-if 'uploaded_images' not in st.session_state:
-    st.session_state.uploaded_images = []
-
-# Form Pages
-def page_1():
-    st.header("📋 Data Umum")
-    with st.form("form1"):
-        nama = st.text_input("Nama")
-        departemen = st.selectbox("Departemen", ["HSE", "Operasi", "HRD", "Logistik", "Lainnya"])
-        tanggal = st.date_input("Tanggal Coaching", value=datetime.today())
-        next_btn = st.form_submit_button("Lanjutkan ➡️")
-        if next_btn:
-            st.session_state.temp = {"Nama": nama, "Departemen": departemen, "Tanggal": tanggal.strftime("%Y-%m-%d")}
-            st.session_state.page += 1
-
-def page_2():
-    st.header("🧠 Topik Coaching")
-    with st.form("form2"):
-        topik = st.text_area("Topik yang Dibahas")
-        tindak_lanjut = st.text_area("Tindak Lanjut yang Diharapkan")
-        next_btn = st.form_submit_button("Lanjutkan ➡️")
-        if next_btn:
-            st.session_state.temp.update({"Topik": topik, "Tindak Lanjut": tindak_lanjut})
-            st.session_state.page += 1
-
-def page_3():
-    st.header("📷 Upload Foto Kegiatan")
-    with st.form("form3"):
-        foto = st.file_uploader("Unggah Foto Bukti (jpg/png)", type=['jpg', 'jpeg', 'png'])
-        submit_btn = st.form_submit_button("✅ Simpan Data")
-        if submit_btn:
-            img_data = None
-            if foto:
-                img_data = foto.read()
-            st.session_state.temp["Foto"] = img_data
-            st.session_state.data.append(st.session_state.temp)
-            st.success("Data berhasil disimpan!")
-            st.session_state.page = 0
-
-# Navigation
-pages = [page_1, page_2, page_3]
-pages[st.session_state.page]()
-
+st.set_page_config(page_title="📋 Safety Coaching Form", layout="wide", page_icon="📋")
+st.title("📋 Form Personal Safety Discussion")
 st.markdown("---")
-st.header("📊 Rekapitulasi Coaching")
 
-if st.session_state.data:
-    df = pd.DataFrame([{k: v for k, v in entry.items() if k != "Foto"} for entry in st.session_state.data])
+# === Input Form ===
+st.header("📝 Formulir Coaching")
 
-    # Filter Sidebar
-    with st.sidebar:
-        st.header("🔎 Filter Data")
-        nama_filter = st.multiselect("Pilih Nama", df["Nama"].unique())
-        departemen_filter = st.multiselect("Pilih Departemen", df["Departemen"].unique())
-        tanggal_range = st.date_input("Rentang Tanggal", [])
+with st.form("form_coaching"):
+    col1, col2 = st.columns(2)
+    with col1:
+        nama = st.text_input("Nama Karyawan")
+        departemen = st.selectbox("Departemen", ["HAULING", "HRGAFINIT", "HSET", "LOGISTIK", "MANAGEMENT", "MAINTENANCE", "MINE OPERATION", "MPE"])
+        tanggal = st.date_input("Tanggal Coaching", value=datetime.today())
+    with col2:
+        topik = st.text_area("Topik Coaching")
+        rekomendasi = st.text_area("Rekomendasi atau Tindak Lanjut")
 
-    filtered_df = df.copy()
-    if nama_filter:
-        filtered_df = filtered_df[filtered_df["Nama"].isin(nama_filter)]
-    if departemen_filter:
-        filtered_df = filtered_df[filtered_df["Departemen"].isin(departemen_filter)]
-    if len(tanggal_range) == 2:
-        start, end = tanggal_range
-        filtered_df = filtered_df[(filtered_df["Tanggal"] >= start.strftime("%Y-%m-%d")) & (filtered_df["Tanggal"] <= end.strftime("%Y-%m-%d"))]
+    uploaded_file = st.file_uploader("📷 Upload Foto Bukti Coaching", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        folder = "uploads"
+        os.makedirs(folder, exist_ok=True)
+        file_path = os.path.join(folder, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+    else:
+        file_path = ""
 
-    st.dataframe(filtered_df)
+    submitted = st.form_submit_button("✅ Submit")
 
-    # Ringkasan Dashboard
-    st.subheader("📈 Statistik Coaching")
+    if submitted:
+        data_baru = {
+            "Nama": nama,
+            "Departemen": departemen,
+            "Tanggal": tanggal.strftime("%Y-%m-%d"),
+            "Topik": topik,
+            "Rekomendasi": rekomendasi,
+            "Foto": file_path
+        }
+        df_baru = pd.DataFrame([data_baru])
+
+        if os.path.exists("data_coaching.csv"):
+            df_lama = pd.read_csv("data_coaching.csv")
+            df = pd.concat([df_lama, df_baru], ignore_index=True)
+        else:
+            df = df_baru
+
+        df.to_csv("data_coaching.csv", index=False)
+        st.success("✅ Data berhasil disimpan!")
+
+# === Dashboard Rekap ===
+st.markdown("---")
+st.header("📊 Dashboard Rekapan Data Coaching")
+
+if os.path.exists("data_coaching.csv"):
+    df = pd.read_csv("data_coaching.csv")
+
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Coaching", len(filtered_df))
-    col2.metric("Topik Unik", filtered_df["Topik"].nunique())
-    if not filtered_df.empty:
-        top_person = filtered_df["Nama"].value_counts().idxmax()
-        top_count = filtered_df["Nama"].value_counts().max()
-        col3.metric("Nama Terbanyak", f"{top_person} ({top_count}x)")
+    with col1:
+        nama_filter = st.selectbox("Filter Nama", options=["Semua"] + sorted(df["Nama"].dropna().unique().tolist()))
+    with col2:
+        dept_filter = st.selectbox("Filter Departemen", options=["Semua"] + sorted(df["Departemen"].dropna().unique().tolist()))
+    with col3:
+        tanggal_filter = st.date_input("Filter Tanggal", value=None)
 
-    # Download Excel
-    def generate_excel():
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            pd.DataFrame(st.session_state.data).drop(columns=["Foto"]).to_excel(writer, sheet_name="Data", index=False)
-            workbook = writer.book
-            worksheet = writer.sheets['Data']
-            row = len(st.session_state.data) + 2
-            worksheet.write(row, 0, "Foto Dokumentasi")
-            for i, entry in enumerate(st.session_state.data):
-                if entry.get("Foto"):
-                    img = Image.open(io.BytesIO(entry["Foto"])).resize((100, 100))
-                    img_bytes = io.BytesIO()
-                    img.save(img_bytes, format='PNG')
-                    worksheet.insert_image(row + i + 1, 0, "image.png", {"image_data": io.BytesIO(img_bytes.getvalue())})
-        excel_buffer.seek(0)
-        return excel_buffer
+    df_filtered = df.copy()
+    if nama_filter != "Semua":
+        df_filtered = df_filtered[df_filtered["Nama"] == nama_filter]
+    if dept_filter != "Semua":
+        df_filtered = df_filtered[df_filtered["Departemen"] == dept_filter]
+    if tanggal_filter:
+        df_filtered = df_filtered[df_filtered["Tanggal"] == tanggal_filter.strftime("%Y-%m-%d")]
 
-    st.download_button("📥 Download Rekapan (Excel)", data=generate_excel(), file_name="rekapan_coaching.xlsx")
+    st.dataframe(df_filtered)
 
+    # === Unduh Excel dengan Gambar ===
+    st.markdown("### 📥 Unduh Rekapan dalam Excel (termasuk gambar)")
+
+    output = io.BytesIO()
+    wb = Workbook()
+    ws = wb.active
+    ws.append(list(df.columns))
+
+    for idx, row in df.iterrows():
+        ws.append(row[:-1].tolist() + [row["Foto"]])
+        img_path = row["Foto"]
+        if os.path.exists(img_path) and img_path.lower().endswith((".jpg", ".jpeg", ".png")):
+            try:
+                img = ExcelImage(img_path)
+                img.width = 100
+                img.height = 100
+                ws.add_image(img, f"G{idx+2}")
+            except:
+                pass
+
+    wb.save(output)
+    output.seek(0)
+
+    st.download_button(
+        label="📥 Download Excel Rekap Coaching",
+        data=output,
+        file_name="rekap_coaching.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 else:
-    st.info("Belum ada data coaching yang dimasukkan.")
+    st.info("Belum ada data coaching yang tersedia.")
+
+# === Style ===
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #f4f9ff;
+        color: #1f2e45;
+    }
+    .stTextInput > div > div > input {
+        background-color: #ffffff;
+    }
+</style>
+""", unsafe_allow_html=True)
