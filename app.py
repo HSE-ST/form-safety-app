@@ -1,117 +1,133 @@
-
 import streamlit as st
 import pandas as pd
-import datetime
-from io import BytesIO
+import io
+from datetime import datetime
+from PIL import Image
+import base64
 
-st.set_page_config(page_title="Personal Safety Discussion", layout="wide")
+st.set_page_config(page_title="Personal Safety Coaching", layout="centered", page_icon="🦺")
 
-st.title("📋 Personal Safety Discussion Form")
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f0f8ff;
+    }
+    .stButton>button {
+        background-color: #2e8b57;
+        color: white;
+    }
+    .stDownloadButton>button {
+        background-color: #4682b4;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# === Form Section ===
-with st.form("safety_form", clear_on_submit=True):
-    st.subheader("🔐 Identitas")
-    col1, col2 = st.columns(2)
+st.title("🦺 Personal Safety Coaching Form")
 
-    with col1:
-        coachee_nama = st.text_input("Nama Coachee")
-        coachee_nik = st.text_input("NIK Coachee")
-        coachee_jabatan = st.text_input("Jabatan Coachee")
-        coachee_departemen = st.text_input("Departemen Coachee")
-        coachee_perusahaan = st.text_input("Perusahaan Coachee")
+# Initialize session state
+if 'page' not in st.session_state:
+    st.session_state.page = 0
 
-    with col2:
-        coach_nama = st.text_input("Nama Coach")
-        coach_nik = st.text_input("NIK Coach")
-        coach_jabatan = st.text_input("Jabatan Coach")
-        coach_departemen = st.text_input("Departemen Coach")
-        coach_perusahaan = st.text_input("Perusahaan Coach")
+if 'data' not in st.session_state:
+    st.session_state.data = []
 
-    tanggal = st.date_input("Tanggal", datetime.date.today())
-    lokasi = st.text_input("Lokasi")
+if 'uploaded_images' not in st.session_state:
+    st.session_state.uploaded_images = []
 
-    st.markdown("### 🗨️ Pertanyaan Pembuka")
-    q1 = st.text_input("1. Bagaimana kabar Anda hari ini?")
-    q2 = st.text_input("2. Apabila cuti Anda pulang kemana?")
-    q3 = st.text_input("3. Bagaimana kabar keluarga dirumah?")
-    q4 = st.text_input("4. Apakah anda sedang mengalami masalah diluar pekerjaan?")
-    q5 = st.text_input("5. Pekerjaan apa yang sedang Anda lakukan hari ini?")
-    q6 = st.text_input("6. Sudah berapa lama melakukan pekerjaan ini?")
-    q7 = st.text_input("7. Sudah berapa lama Anda bekerja di IUP SCM?")
-    q8 = st.text_input("8. Apakah ada kendala di pekerjaan? Kalau ada anda bisa ceritakan!")
-    q9 = st.text_input("9. Pertanyaan lainnya?")
+# Form Pages
+def page_1():
+    st.header("📋 Data Umum")
+    with st.form("form1"):
+        nama = st.text_input("Nama")
+        departemen = st.selectbox("Departemen", ["HSE", "Operasi", "HRD", "Logistik", "Lainnya"])
+        tanggal = st.date_input("Tanggal Coaching", value=datetime.today())
+        next_btn = st.form_submit_button("Lanjutkan ➡️")
+        if next_btn:
+            st.session_state.temp = {"Nama": nama, "Departemen": departemen, "Tanggal": tanggal.strftime("%Y-%m-%d")}
+            st.session_state.page += 1
 
-    st.markdown("### 💬 Diskusi Umum")
-    diskusi = st.text_area("Diskusi Umum")
+def page_2():
+    st.header("🧠 Topik Coaching")
+    with st.form("form2"):
+        topik = st.text_area("Topik yang Dibahas")
+        tindak_lanjut = st.text_area("Tindak Lanjut yang Diharapkan")
+        next_btn = st.form_submit_button("Lanjutkan ➡️")
+        if next_btn:
+            st.session_state.temp.update({"Topik": topik, "Tindak Lanjut": tindak_lanjut})
+            st.session_state.page += 1
 
-    st.markdown("### ✅ Saran & Komitmen Safety")
-    saran = st.text_area("Saran & Komitmen Safety")
+def page_3():
+    st.header("📷 Upload Foto Kegiatan")
+    with st.form("form3"):
+        foto = st.file_uploader("Unggah Foto Bukti (jpg/png)", type=['jpg', 'jpeg', 'png'])
+        submit_btn = st.form_submit_button("✅ Simpan Data")
+        if submit_btn:
+            img_data = None
+            if foto:
+                img_data = foto.read()
+            st.session_state.temp["Foto"] = img_data
+            st.session_state.data.append(st.session_state.temp)
+            st.success("Data berhasil disimpan!")
+            st.session_state.page = 0
 
-    submitted = st.form_submit_button("✅ Submit")
+# Navigation
+pages = [page_1, page_2, page_3]
+pages[st.session_state.page]()
 
-# === Save to CSV ===
-if submitted:
-    df = pd.DataFrame([{
-        "Tanggal": tanggal,
-        "Lokasi": lokasi,
-        "Coachee": coachee_nama,
-        "NIK Coachee": coachee_nik,
-        "Jabatan Coachee": coachee_jabatan,
-        "Departemen Coachee": coachee_departemen,
-        "Perusahaan Coachee": coachee_perusahaan,
-        "Coach": coach_nama,
-        "NIK Coach": coach_nik,
-        "Jabatan Coach": coach_jabatan,
-        "Departemen Coach": coach_departemen,
-        "Perusahaan Coach": coach_perusahaan,
-        "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5,
-        "Q6": q6, "Q7": q7, "Q8": q8, "Q9": q9,
-        "Diskusi": diskusi, "Saran": saran
-    }])
-    try:
-        old = pd.read_csv("hasil_form_safety.csv")
-        df = pd.concat([old, df], ignore_index=True)
-    except:
-        pass
-    df.to_csv("hasil_form_safety.csv", index=False)
-    st.success("Data berhasil disimpan!")
+st.markdown("---")
+st.header("📊 Rekapitulasi Coaching")
 
-# === Dashboard Rekap ===
-st.subheader("📊 Dashboard Rekap Data")
-try:
-    data = pd.read_csv("hasil_form_safety.csv")
+if st.session_state.data:
+    df = pd.DataFrame([{k: v for k, v in entry.items() if k != "Foto"} for entry in st.session_state.data])
 
-    with st.expander("📁 Lihat Data"):
-        st.dataframe(data)
+    # Filter Sidebar
+    with st.sidebar:
+        st.header("🔎 Filter Data")
+        nama_filter = st.multiselect("Pilih Nama", df["Nama"].unique())
+        departemen_filter = st.multiselect("Pilih Departemen", df["Departemen"].unique())
+        tanggal_range = st.date_input("Rentang Tanggal", [])
 
+    filtered_df = df.copy()
+    if nama_filter:
+        filtered_df = filtered_df[filtered_df["Nama"].isin(nama_filter)]
+    if departemen_filter:
+        filtered_df = filtered_df[filtered_df["Departemen"].isin(departemen_filter)]
+    if len(tanggal_range) == 2:
+        start, end = tanggal_range
+        filtered_df = filtered_df[(filtered_df["Tanggal"] >= start.strftime("%Y-%m-%d")) & (filtered_df["Tanggal"] <= end.strftime("%Y-%m-%d"))]
+
+    st.dataframe(filtered_df)
+
+    # Ringkasan Dashboard
+    st.subheader("📈 Statistik Coaching")
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Coaching", len(data))
-    with col2:
-        st.metric("Jumlah Coach Unik", data["Coach"].nunique())
-    with col3:
-        st.metric("Jumlah Coachee Unik", data["Coachee"].nunique())
-
-    with st.expander("🔍 Filter Data"):
-        tanggal_filter = st.date_input("Tanggal", [])
-        nama_filter = st.text_input("Cari nama (coach atau coachee)")
-        departemen_filter = st.text_input("Cari departemen")
-
-        filtered = data.copy()
-        if tanggal_filter:
-            filtered = filtered[filtered["Tanggal"].isin([str(t) for t in tanggal_filter])]
-        if nama_filter:
-            filtered = filtered[filtered["Coach"].str.contains(nama_filter, case=False) | filtered["Coachee"].str.contains(nama_filter, case=False)]
-        if departemen_filter:
-            filtered = filtered[filtered["Departemen Coachee"].str.contains(departemen_filter, case=False)]
-
-        st.dataframe(filtered)
+    col1.metric("Total Coaching", len(filtered_df))
+    col2.metric("Topik Unik", filtered_df["Topik"].nunique())
+    if not filtered_df.empty:
+        top_person = filtered_df["Nama"].value_counts().idxmax()
+        top_count = filtered_df["Nama"].value_counts().max()
+        col3.metric("Nama Terbanyak", f"{top_person} ({top_count}x)")
 
     # Download Excel
-    excel_buffer = BytesIO()
-    filtered.to_excel(excel_buffer, index=False, engine='openpyxl')
-    st.download_button("⬇️ Download Excel", data=excel_buffer.getvalue(), file_name="rekap_safety.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    def generate_excel():
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            pd.DataFrame(st.session_state.data).drop(columns=["Foto"]).to_excel(writer, sheet_name="Data", index=False)
+            workbook = writer.book
+            worksheet = writer.sheets['Data']
+            row = len(st.session_state.data) + 2
+            worksheet.write(row, 0, "Foto Dokumentasi")
+            for i, entry in enumerate(st.session_state.data):
+                if entry.get("Foto"):
+                    img = Image.open(io.BytesIO(entry["Foto"])).resize((100, 100))
+                    img_bytes = io.BytesIO()
+                    img.save(img_bytes, format='PNG')
+                    worksheet.insert_image(row + i + 1, 0, "image.png", {"image_data": io.BytesIO(img_bytes.getvalue())})
+        excel_buffer.seek(0)
+        return excel_buffer
 
-except Exception as e:
-    st.warning("Belum ada data coaching yang disubmit.")
+    st.download_button("📥 Download Rekapan (Excel)", data=generate_excel(), file_name="rekapan_coaching.xlsx")
 
+else:
+    st.info("Belum ada data coaching yang dimasukkan.")
