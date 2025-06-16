@@ -7,11 +7,17 @@ import xlsxwriter
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
 AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
-if "email" not in st.session_state:
-    with st.sidebar:
-        st.session_state["email"] = st.text_input("🔒 Masukkan email untuk akses dashboard:", "")
 
-email = st.session_state["email"].strip().lower()
+# Sidebar for login
+if "email" not in st.session_state:
+    st.session_state["email"] = ""
+
+with st.sidebar:
+    email_input = st.text_input("🔒 Masukkan email untuk akses dashboard:", value=st.session_state["email"])
+    if st.button("Login"):
+        st.session_state["email"] = email_input.strip().lower()
+
+email = st.session_state["email"]
 is_authorized = email == AUTHORIZED_EMAIL
 
 st.title("🛡️ Personal Safety Discussion")
@@ -122,4 +128,4 @@ if is_authorized:
     else:
         st.info("Belum ada data tersedia.")
 else:
-    st.info("Silakan masukkan email untuk mengakses dashboard.")
+    st.info("Silakan masukkan email dan klik Login untuk mengakses dashboard.")
