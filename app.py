@@ -1,14 +1,20 @@
-
 import streamlit as st
 import pandas as pd
+import os
 from io import BytesIO
 import xlsxwriter
+from PIL import Image
 
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
 AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
+DATA_CSV = "data.csv"
+IMAGE_DIR = "uploaded_images"
 
-# Sidebar for login
+if not os.path.exists(IMAGE_DIR):
+    os.makedirs(IMAGE_DIR)
+
+# Sidebar Login
 if "email" not in st.session_state:
     st.session_state["email"] = ""
 
@@ -21,7 +27,7 @@ email = st.session_state["email"]
 is_authorized = email == AUTHORIZED_EMAIL
 
 st.title("🛡️ Personal Safety Discussion")
-st.markdown("Formulir ini berdasarkan format OHS/F-138 untuk mendokumentasikan diskusi keselamatan.")
+st.markdown("Formulir ini berdasarkan format **OHS/F-138** untuk mendokumentasikan diskusi keselamatan.")
 
 with st.form("psd_form", clear_on_submit=True):
     st.header("📅 Informasi Diskusi")
@@ -53,7 +59,7 @@ with st.form("psd_form", clear_on_submit=True):
     pertanyaan = [
         "1. Bagaimana kabar Anda hari ini?",
         "2. Apabila cuti Anda pulang kemana?",
-        "3. Bagaimana kabar keluarga dirumah?",
+        "3. Bagaimana kabar keluarga di rumah?",
         "4. Apakah Anda sedang mengalami masalah di luar pekerjaan?",
         "5. Pekerjaan apa yang sedang Anda lakukan hari ini?",
         "6. Sudah berapa lama melakukan pekerjaan ini?",
@@ -67,7 +73,7 @@ with st.form("psd_form", clear_on_submit=True):
     diskusi = st.text_area("Diskusikan hal-hal umum terkait keselamatan:")
 
     st.header("✅ Saran & Komitmen")
-    saran = st.text_area("Masukkan saran dan komitmen safety:")
+    saran = st.text_area("Masukkan saran dan komitmen keselamatan:")
 
     st.header("📸 Upload Foto Bukti Kegiatan")
     foto = st.file_uploader("Upload foto (jpeg/png)", type=["jpg", "jpeg", "png"])
@@ -75,10 +81,13 @@ with st.form("psd_form", clear_on_submit=True):
     submit = st.form_submit_button("Submit")
 
     if submit:
-        st.success("Data berhasil disimpan sementara.")
-        if "data" not in st.session_state:
-            st.session_state["data"] = []
-        st.session_state["data"].append({
+        image_filename = ""
+        if foto:
+            image_filename = f"{IMAGE_DIR}/{tanggal.strftime('%Y%m%d')}_{coachee['Nama'].replace(' ', '_')}.png"
+            with open(image_filename, "wb") as f:
+                f.write(foto.getbuffer())
+
+        new_entry = {
             "Tanggal": tanggal.strftime("%Y-%m-%d"),
             "Lokasi": lokasi,
             "Perusahaan": perusahaan,
@@ -87,45 +96,47 @@ with st.form("psd_form", clear_on_submit=True):
             **{f"Q{i+1}": jawaban[i] for i in range(len(jawaban))},
             "Diskusi Umum": diskusi,
             "Saran & Komitmen": saran,
-            "Foto": foto
-        })
+            "Foto": image_filename
+        }
 
-# Dashboard and export
+        df_new = pd.DataFrame([new_entry])
+        if os.path.exists(DATA_CSV):
+            df_existing = pd.read_csv(DATA_CSV)
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            df_combined = df_new
+
+        df_combined.to_csv(DATA_CSV, index=False)
+        st.success("Data berhasil disimpan.")
+
+# DASHBOARD UNTUK EMAIL TERTENTU
 if is_authorized:
     st.header("📊 Dashboard & Rekap")
-    if "data" in st.session_state and st.session_state["data"]:
-        df_display = pd.DataFrame([{k: v for k, v in row.items() if k != "Foto"} for row in st.session_state["data"]])
-        st.dataframe(df_display)
+    if os.path.exists(DATA_CSV):
+        df = pd.read_csv(DATA_CSV)
+        st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
 
-        def create_excel(data):
+        def export_excel(df):
             output = BytesIO()
             wb = xlsxwriter.Workbook(output, {'in_memory': True})
             ws = wb.add_worksheet("Rekap")
 
-            headers = list(data[0].keys())
-            headers.remove("Foto")
-            headers.append("Foto")
+            headers = list(df.columns)
+            ws.write_row(0, 0, headers)
 
-            for col_idx, header in enumerate(headers):
-                ws.write(0, col_idx, header)
-
-            for row_idx, entry in enumerate(data, start=1):
-                for col_idx, key in enumerate(headers):
-                    if key == "Foto":
-                        if entry["Foto"]:
-                            image_bytes = entry["Foto"].getvalue()
-                            ws.insert_image(row_idx, col_idx, entry["Foto"].name,
-                                            {"image_data": BytesIO(image_bytes), "x_scale": 0.3, "y_scale": 0.3})
+            for idx, row in df.iterrows():
+                for col_idx, col in enumerate(headers):
+                    if col == "Foto" and os.path.exists(str(row[col])):
+                        ws.insert_image(idx + 1, col_idx, str(row[col]), {"x_scale": 0.3, "y_scale": 0.3})
                     else:
-                        ws.write(row_idx, col_idx, entry.get(key, ""))
-
+                        ws.write(idx + 1, col_idx, str(row[col]))
             wb.close()
             output.seek(0)
             return output
 
-        excel_data = create_excel(st.session_state["data"])
+        excel_data = export_excel(df)
         st.download_button("📥 Unduh Rekap Excel", data=excel_data, file_name="rekap_psd.xlsx")
     else:
-        st.info("Belum ada data tersedia.")
+        st.info("Belum ada data tersimpan.")
 else:
-    st.info("Silakan masukkan email dan klik Login untuk mengakses dashboard.")
+    st.info("Login dengan email yang berwenang untuk melihat dashboard.")
