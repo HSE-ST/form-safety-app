@@ -15,6 +15,33 @@ IMAGE_DIR = "uploaded_images"
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
+def create_excel_file(df):
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Data PSD")
+
+    bold = workbook.add_format({'bold': True})
+
+    for col_num, column in enumerate(df.columns):
+        worksheet.write(0, col_num, column, bold)
+
+    for row_num, row in enumerate(df.itertuples(index=False), start=1):
+        for col_num, value in enumerate(row):
+            if df.columns[col_num] == "Foto" and isinstance(value, str) and os.path.exists(value):
+                worksheet.set_row(row_num, 40)
+                worksheet.insert_image(row_num, col_num, value, {
+                    'x_scale': 0.2,
+                    'y_scale': 0.2,
+                    'x_offset': 2,
+                    'y_offset': 2
+                })
+            else:
+                worksheet.write(row_num, col_num, value)
+
+    workbook.close()
+    output.seek(0)
+    return output
+
 if "email" not in st.session_state:
     st.session_state["email"] = ""
 
@@ -51,7 +78,7 @@ with st.form("psd_form", clear_on_submit=True):
             "Nama": st.text_input("Nama Coach"),
             "NIK": st.text_input("NIK Coach"),
             "Jabatan": st.text_input("Jabatan Coach"),
-            "Departemen": st.text_input("Departemen Coach"),      
+            "Departemen": st.text_input("Departemen Coach")      
         }
 
     st.header("🗣️ Pertanyaan Pembuka")
@@ -108,19 +135,14 @@ with st.form("psd_form", clear_on_submit=True):
         df_combined.to_csv(DATA_CSV, index=False)
         st.success("Data berhasil disimpan.")
 
-# Dashboard admin
 if is_authorized:
     st.header("📊 Dashboard & Manajemen Data")
     if os.path.exists(DATA_CSV):
         df = pd.read_csv(DATA_CSV)
         st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
 
-        st.download_button(
-            label="📥 Download data (Excel)",
-            file_name="psd_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            data=create_excel_file(df),
-        )
+        excel_data = create_excel_file(df)
+        st.download_button("⬇️ Download Excel", data=excel_data, file_name="personal_safety_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         with st.expander("🔧 Hapus semua data?"):
             if st.button("Hapus data CSV"):
@@ -130,28 +152,3 @@ if is_authorized:
         st.info("Belum ada data.")
 else:
     st.info("Login dengan email resmi untuk akses dashboard.")
-
-def create_excel_file(dataframe):
-    output = BytesIO()
-    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet("Personal Safety")
-
-    worksheet.set_column("A:Z", 20)
-    header_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2'})
-    for col_num, value in enumerate(dataframe.columns):
-        worksheet.write(0, col_num, value, header_format)
-
-    for row_num, row in enumerate(dataframe.itertuples(index=False), start=1):
-        for col_num, cell in enumerate(row):
-            if dataframe.columns[col_num] == "Foto" and cell and os.path.exists(cell):
-                worksheet.set_row(row_num, 80)
-                worksheet.insert_image(row_num, col_num, cell, {
-                    'x_scale': 0.2, 'y_scale': 0.2,
-                    'x_offset': 5, 'y_offset': 5
-                })
-            else:
-                worksheet.write(row_num, col_num, str(cell))
-
-    workbook.close()
-    output.seek(0)
-    return output
