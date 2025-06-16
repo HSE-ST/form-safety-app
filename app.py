@@ -1,143 +1,127 @@
-# Personal Safety Discussion App
 import streamlit as st
 import pandas as pd
 import os
-from io import BytesIO
-import xlsxwriter
+from datetime import datetime
 from PIL import Image
-import smtplib
-from email.message import EmailMessage
+from io import BytesIO
 
-st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Personal Safety Discussion", layout="wide")
 
-AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
-DATA_CSV = "data.csv"
-IMAGE_DIR = "uploaded_images"
+DATA_FILE = "data.csv"
+UPLOAD_FOLDER = "uploaded_images"
+ALLOWED_VIEWER_EMAIL = "hset.mbma@sinarterangmandiri.com"
 
-if not os.path.exists(IMAGE_DIR):
-    os.makedirs(IMAGE_DIR)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-if "email" not in st.session_state:
-    st.session_state["email"] = ""
+st.title("📋 Personal Safety Discussion")
 
-with st.sidebar:
-    email_input = st.text_input("🔐 Masukkan email untuk akses dashboard:", value=st.session_state["email"])
-    if st.button("Login"):
-        st.session_state["email"] = email_input.strip().lower()
+menu = st.sidebar.radio("Menu", ["Isi Form", "Dashboard & Download (Admin)"])
 
-email = st.session_state["email"]
-is_authorized = email == AUTHORIZED_EMAIL
+if menu == "Isi Form":
+    with st.form("psd_form"):
+        st.subheader("🔹 Informasi Pribadi")
+        nama = st.text_input("Nama Lengkap")
+        departemen = st.selectbox("Departemen", [
+            "HSET", "HAULING", "HRGAFINIT", "LOGISTIK",
+            "MAINTENANCE", "MANAGEMENT", "MINE OPERATION", "MPE"
+        ])
+        jabatan = st.text_input("Jabatan")
+        lokasi = st.text_input("Lokasi Diskusi")
+        tanggal = st.date_input("Tanggal PSD", value=datetime.today())
 
-st.title("🛡️ Personal Safety Discussion")
+        st.subheader("🔹 Pertanyaan Pembuka")
+        pembuka = st.text_area("Apa yang sedang kamu kerjakan saat ini?")
+        potensi_bahaya = st.text_area("Apa potensi bahayanya?")
+        pengendalian = st.text_area("Apa pengendalian yang digunakan?")
 
-with st.form("psd_form", clear_on_submit=True):
-    st.header("📅 Informasi Diskusi")
-    col1, col2 = st.columns(2)
-    with col1:
-        tanggal = st.date_input("Tanggal")
-        lokasi = st.text_input("Lokasi")
-    with col2:
-        perusahaan = st.text_input("Perusahaan Coachee")
+        st.subheader("🔹 Diskusi Umum")
+        diskusi = st.text_area("Topik atau isi diskusi:")
+        saran = st.text_area("Masukan atau saran terkait keselamatan:")
+        komitmen = st.text_area("Komitmen terhadap keselamatan:")
 
-    st.header("👥 Data Coachee & Coach")
-    col1, col2 = st.columns(2)
-    with col1:
-        coachee = {
-            "Nama": st.text_input("Nama Coachee"),
-            "NIK": st.text_input("NIK Coachee"),
-            "Jabatan": st.text_input("Jabatan Coachee"),
-            "Departemen": st.text_input("Departemen Coachee")
-        }
-    with col2:
-        coach = {
-            "Nama": st.text_input("Nama Coach"),
-            "NIK": st.text_input("NIK Coach"),
-            "Jabatan": st.text_input("Jabatan Coach"),
-            "Departemen": st.text_input("Departemen Coach"),
-            "Email": st.text_input("Email Coach")
-        }
+        st.subheader("🔹 Upload Foto (opsional)")
+        foto = st.file_uploader("Upload Foto Kegiatan", type=["jpg", "jpeg", "png"])
 
-    st.header("🗣️ Pertanyaan Pembuka")
-    pertanyaan = [
-        "1. Bagaimana kabar Anda hari ini?",
-        "2. Apabila cuti Anda pulang kemana?",
-        "3. Bagaimana kabar keluarga di rumah?",
-        "4. Apakah Anda sedang mengalami masalah di luar pekerjaan?",
-        "5. Pekerjaan apa yang sedang Anda lakukan hari ini?",
-        "6. Sudah berapa lama melakukan pekerjaan ini?",
-        "7. Sudah berapa lama Anda bekerja di IUP SCM?",
-        "8. Apakah ada kendala di pekerjaan?",
-        "9. Pertanyaan lainnya:"
-    ]
-    jawaban = [st.text_input(q) for q in pertanyaan]
+        submitted = st.form_submit_button("Kirim")
 
-    st.header("💬 Diskusi Umum")
-    diskusi = st.text_area("Diskusikan hal-hal umum terkait keselamatan:")
+        if submitted:
+            foto_filename = ""
+            if foto:
+                foto_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{foto.name}"
+                with open(os.path.join(UPLOAD_FOLDER, foto_filename), "wb") as f:
+                    f.write(foto.getbuffer())
 
-    st.header("✅ Saran & Komitmen")
-    saran = st.text_area("Masukkan saran dan komitmen keselamatan:")
+            new_data = {
+                "Tanggal": tanggal.strftime("%Y-%m-%d"),
+                "Nama": nama,
+                "Departemen": departemen,
+                "Jabatan": jabatan,
+                "Lokasi": lokasi,
+                "Aktivitas": pembuka,
+                "Bahaya": potensi_bahaya,
+                "Pengendalian": pengendalian,
+                "Diskusi": diskusi,
+                "Saran": saran,
+                "Komitmen": komitmen,
+                "Foto": foto_filename,
+                "Waktu Submit": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
 
-    st.header("📸 Upload Foto Bukti Kegiatan")
-    foto = st.file_uploader("Upload foto (jpeg/png)", type=["jpg", "jpeg", "png"])
+            df_new = pd.DataFrame([new_data])
+            if os.path.exists(DATA_FILE):
+                df = pd.read_csv(DATA_FILE)
+                df = pd.concat([df, df_new], ignore_index=True)
+            else:
+                df = df_new
+            df.to_csv(DATA_FILE, index=False)
+            st.success("✅ Data berhasil disimpan.")
 
-    submit = st.form_submit_button("Submit")
+# =============== DASHBOARD ================
+if menu == "Dashboard & Download (Admin)":
+    st.subheader("📊 Dashboard Data PSD")
+    email = st.text_input("Masukkan email admin:")
 
-    if submit:
-        image_filename = ""
-        if foto:
-            image_filename = f"{IMAGE_DIR}/{tanggal.strftime('%Y%m%d')}_{coachee['Nama'].replace(' ', '_')}.png"
-            with open(image_filename, "wb") as f:
-                f.write(foto.getbuffer())
+    if email.lower().strip() == ALLOWED_VIEWER_EMAIL:
+        if os.path.exists(DATA_FILE):
+            df = pd.read_csv(DATA_FILE)
 
-        new_entry = {
-            "Tanggal": tanggal.strftime("%Y-%m-%d"),
-            "Lokasi": lokasi,
-            "Perusahaan": perusahaan,
-            **{f"Coachee - {k}": v for k, v in coachee.items()},
-            **{f"Coach - {k}": v for k, v in coach.items()},
-            **{f"Q{i+1}": jawaban[i] for i in range(len(jawaban))},
-            "Diskusi Umum": diskusi,
-            "Saran & Komitmen": saran,
-            "Foto": image_filename
-        }
+            st.success("✅ Data ditemukan. Menampilkan dashboard.")
+            st.metric("Jumlah Entri", len(df))
+            st.dataframe(df[["Tanggal", "Nama", "Departemen", "Lokasi"]])
 
-        df_new = pd.DataFrame([new_entry])
-        if os.path.exists(DATA_CSV):
-            df_existing = pd.read_csv(DATA_CSV)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            st.markdown("---")
+            def convert_df_with_images(df):
+                from xlsxwriter import Workbook
+
+                output = BytesIO()
+                workbook = Workbook(output, {'in_memory': True})
+                worksheet = workbook.add_worksheet("PSD")
+
+                headers = list(df.columns)
+                for col_num, header in enumerate(headers):
+                    worksheet.write(0, col_num, header)
+
+                for row_num, row in df.iterrows():
+                    for col_num, value in enumerate(row):
+                        if headers[col_num] == "Foto" and value:
+                            img_path = os.path.join(UPLOAD_FOLDER, value)
+                            if os.path.exists(img_path):
+                                worksheet.insert_image(row_num+1, col_num, img_path,
+                                    {'x_scale': 0.15, 'y_scale': 0.15, 'x_offset': 2, 'y_offset': 2})
+                        else:
+                            worksheet.write(row_num+1, col_num, value)
+                workbook.close()
+                output.seek(0)
+                return output
+
+            excel_data = convert_df_with_images(df)
+            st.download_button("⬇️ Download Excel + Gambar", data=excel_data,
+                               file_name="rekap_psd.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            if st.button("🗑️ Hapus Semua Data"):
+                os.remove(DATA_FILE)
+                st.success("Semua data berhasil dihapus.")
         else:
-            df_combined = df_new
-
-        df_combined.to_csv(DATA_CSV, index=False)
-        st.success("Data berhasil disimpan.")
-
-        # Kirim email ke Coach (jika diisi)
-        if coach["Email"]:
-            try:
-                msg = EmailMessage()
-                msg['Subject'] = f"Bukti PSD - {tanggal.strftime('%Y-%m-%d')}"
-                msg['From'] = "noreply@formpsd.com"
-                msg['To'] = coach["Email"]
-                email_body = "\n".join([f"{k}: {v}" for k, v in new_entry.items() if k != "Foto"])
-                msg.set_content(f"Halo {coach['Nama']},\n\nTerima kasih telah melakukan Personal Safety Discussion pada {tanggal.strftime('%d-%m-%Y')} dengan {coachee['Nama']}. Berikut data diskusinya:\n\n{email_body}\n\nSalam,\nTim HSE")
-
-                with smtplib.SMTP('localhost') as smtp:
-                    smtp.send_message(msg)
-            except Exception as e:
-                st.warning(f"Gagal kirim email ke Coach: {e}")
-
-# Dashboard admin
-if is_authorized:
-    st.header("📊 Dashboard & Manajemen Data")
-    if os.path.exists(DATA_CSV):
-        df = pd.read_csv(DATA_CSV)
-        st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
-
-        with st.expander("🔧 Hapus semua data?"):
-            if st.button("Hapus data CSV"):
-                os.remove(DATA_CSV)
-                st.success("Data berhasil dihapus.")
+            st.warning("Belum ada data.")
     else:
-        st.info("Belum ada data.")
-else:
-    st.info("Login dengan email resmi untuk akses dashboard.")
+        st.warning("❌ Akses hanya untuk admin.")
