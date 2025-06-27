@@ -1,25 +1,26 @@
-# Personal Safety Discussion App (Google Sheets Version - FIXED)
+# Personal Safety Discussion App
 import streamlit as st
 import pandas as pd
-import gspread
 import json
-from datetime import datetime
-from io import BytesIO
-import xlsxwriter
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# ============ CONFIG ============
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
 AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
 SPREADSHEET_ID = "1oAEnIloBQqY2rv_b7_0_djkHmCKytjUOlqvQAYfKIIA"
-SHEET_NAME = "data"
+SHEET_NAME = "Form Responses"
 
-# ============ GOOGLE AUTH ============
+# Gunakan secrets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
-client = gspread.service_account_from_dict(creds_dict)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
 sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
-# Session state for login
+def append_row(data):
+    sheet.append_row(data)
+
 if "email" not in st.session_state:
     st.session_state["email"] = ""
 
@@ -45,19 +46,19 @@ with st.form("psd_form", clear_on_submit=True):
     st.header("👥 Data Coachee & Coach")
     col1, col2 = st.columns(2)
     with col1:
-        coachee = {
-            "Nama": st.text_input("Nama Coachee"),
-            "NIK": st.text_input("NIK Coachee"),
-            "Jabatan": st.text_input("Jabatan Coachee"),
-            "Departemen": st.text_input("Departemen Coachee")
-        }
+        coachee = [
+            st.text_input("Nama Coachee"),
+            st.text_input("NIK Coachee"),
+            st.text_input("Jabatan Coachee"),
+            st.text_input("Departemen Coachee")
+        ]
     with col2:
-        coach = {
-            "Nama": st.text_input("Nama Coach"),
-            "NIK": st.text_input("NIK Coach"),
-            "Jabatan": st.text_input("Jabatan Coach"),
-            "Departemen": st.text_input("Departemen Coach")
-        }
+        coach = [
+            st.text_input("Nama Coach"),
+            st.text_input("NIK Coach"),
+            st.text_input("Jabatan Coach"),
+            st.text_input("Departemen Coach")
+        ]
 
     st.header("🗣️ Pertanyaan Pembuka")
     pertanyaan = [
@@ -82,34 +83,27 @@ with st.form("psd_form", clear_on_submit=True):
     submit = st.form_submit_button("Submit")
 
     if submit:
-        row = [
-            tanggal.strftime("%Y-%m-%d"),
-            lokasi,
-            perusahaan,
-            *coachee.values(),
-            *coach.values(),
-            *jawaban,
-            diskusi,
-            saran
+        row_data = [
+            tanggal.strftime("%Y-%m-%d"), lokasi, perusahaan,
+            *coachee, *coach, *jawaban,
+            diskusi, saran
         ]
-        sheet.append_row(row)
-        st.success("✅ Data berhasil disimpan ke Google Sheets")
+        append_row(row_data)
+        st.success("Data berhasil disimpan ke Google Sheets.")
 
-# Dashboard & download
+# Dashboard
 if is_authorized:
-    st.header("📊 Dashboard & Unduh Data")
+    st.header("📊 Dashboard & Manajemen Data")
     data = sheet.get_all_values()
-    df = pd.DataFrame(data[1:], columns=data[0])
+    headers = data[0]
+    rows = data[1:]
+    df = pd.DataFrame(rows, columns=headers)
+
     st.dataframe(df, use_container_width=True)
 
-    def to_excel(df):
-        output = BytesIO()
-        writer = pd.ExcelWriter(output, engine='xlsxwriter')
-        df.to_excel(writer, sheet_name='PSD', index=False)
-        writer.close()
-        return output.getvalue()
-
-    excel_data = to_excel(df)
-    st.download_button("📥 Download Excel", data=excel_data, file_name="psd_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    with st.expander("🔧 Hapus semua data?"):
+        if st.button("Hapus semua isi Google Sheet"):
+            sheet.resize(rows=1)  # Sisakan hanya header
+            st.success("Seluruh data berhasil dihapus dari Google Sheets.")
 else:
     st.info("Login dengan email resmi untuk akses dashboard.")
