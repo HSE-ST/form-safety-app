@@ -10,7 +10,7 @@ from datetime import datetime
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
 # Spreadsheet credentials from Streamlit Secrets
-creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+creds_dict = st.secrets["GOOGLE_CREDENTIALS"]
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
