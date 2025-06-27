@@ -1,57 +1,50 @@
-# Personal Safety Discussion App
+
 import streamlit as st
 import pandas as pd
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 from io import BytesIO
 import xlsxwriter
-from PIL import Image
 
-st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
-
+# === Konfigurasi ===
+SHEET_ID = "1oAEnIloBQqY2rv_b7_0_djkHmCKytjUOlqvQAYfKIIA"
+SHEET_NAME = "Sheet1"
+CREDENTIALS_FILE = "credentials.json"
 AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
-DATA_CSV = "data.csv"
-IMAGE_DIR = "uploaded_images"
 
-if not os.path.exists(IMAGE_DIR):
-    os.makedirs(IMAGE_DIR)
+# === Setup Google Sheets ===
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
 
-if "email" not in st.session_state:
-    st.session_state["email"] = ""
+# Fungsi bantu
+def append_data_to_sheet(data: dict):
+    values = list(data.values())
+    sheet.append_row(values, value_input_option="USER_ENTERED")
 
-def create_excel_file(df):
+def get_data_as_dataframe():
+    records = sheet.get_all_records()
+    return pd.DataFrame(records)
+
+def create_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='Data PSD', index=False, startrow=1, header=False)
-        workbook = writer.book
-        worksheet = writer.sheets['Data PSD']
-
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(0, col_num, value)
-
-        for row_num, foto_path in enumerate(df['Foto'], start=1):
-            if pd.notna(foto_path) and os.path.exists(foto_path):
-                worksheet.set_row(row_num, 80)
-                worksheet.insert_image(row_num, df.columns.get_loc("Foto"), foto_path, {
-                    'x_scale': 0.2,
-                    'y_scale': 0.2,
-                    'object_position': 1
-                })
-
-        for row_num, row in df.iterrows():
-            for col_num, value in enumerate(row):
-                cell_row = row_num + 1
-                if pd.isna(value):
-                    worksheet.write_blank(cell_row, col_num, None)
-                elif isinstance(value, (int, float)):
-                    worksheet.write_number(cell_row, col_num, value)
-                else:
-                    worksheet.write(cell_row, col_num, str(value))
-
+        df.to_excel(writer, index=False, sheet_name='PSD')
     output.seek(0)
     return output
 
+# UI: Login
+st.set_page_config(page_title="Personal Safety Discussion", layout="wide")
+if "email" not in st.session_state:
+    st.session_state["email"] = ""
+
 with st.sidebar:
-    email_input = st.text_input("🔐 Masukkan email untuk akses dashboard:", value=st.session_state["email"])
+    email_input = st.text_input("🔐 Masukkan email admin:", value=st.session_state["email"])
     if st.button("Login"):
         st.session_state["email"] = email_input.strip().lower()
 
@@ -60,16 +53,14 @@ is_authorized = email == AUTHORIZED_EMAIL
 
 st.title("🛡️ Personal Safety Discussion")
 
+# === FORM ===
 with st.form("psd_form", clear_on_submit=True):
-    st.header("📅 Informasi Diskusi")
-    col1, col2 = st.columns(2)
-    with col1:
-        tanggal = st.date_input("Tanggal")
-        lokasi = st.text_input("Lokasi")
-    with col2:
-        perusahaan = st.text_input("Perusahaan Coachee")
+    st.subheader("📅 Informasi Diskusi")
+    tanggal = st.date_input("Tanggal")
+    lokasi = st.text_input("Lokasi")
+    perusahaan = st.text_input("Perusahaan Coachee")
 
-    st.header("👥 Data Coachee & Coach")
+    st.subheader("👥 Coachee & Coach")
     col1, col2 = st.columns(2)
     with col1:
         coachee = {
@@ -83,10 +74,10 @@ with st.form("psd_form", clear_on_submit=True):
             "Nama": st.text_input("Nama Coach"),
             "NIK": st.text_input("NIK Coach"),
             "Jabatan": st.text_input("Jabatan Coach"),
-            "Departemen": st.text_input("Departemen Coach"),      
+            "Departemen": st.text_input("Departemen Coach")
         }
 
-    st.header("🗣️ Pertanyaan Pembuka")
+    st.subheader("🗣️ Pertanyaan Pembuka")
     pertanyaan = [
         "1. Bagaimana kabar Anda hari ini?",
         "2. Apabila cuti Anda pulang kemana?",
@@ -100,24 +91,15 @@ with st.form("psd_form", clear_on_submit=True):
     ]
     jawaban = [st.text_input(q) for q in pertanyaan]
 
-    st.header("💬 Diskusi Umum")
-    diskusi = st.text_area("Diskusikan hal-hal umum terkait keselamatan:")
+    st.subheader("💬 Diskusi Umum")
+    diskusi = st.text_area("Diskusi umum terkait keselamatan:")
 
-    st.header("✅ Saran & Komitmen")
-    saran = st.text_area("Masukkan saran dan komitmen keselamatan:")
+    st.subheader("✅ Saran & Komitmen")
+    saran = st.text_area("Saran dan komitmen keselamatan:")
 
-    st.header("📸 Upload Foto Bukti Kegiatan")
-    foto = st.file_uploader("Upload foto (jpeg/png)", type=["jpg", "jpeg", "png"])
+    submitted = st.form_submit_button("Submit")
 
-    submit = st.form_submit_button("Submit")
-
-    if submit:
-        image_filename = ""
-        if foto:
-            image_filename = f"{IMAGE_DIR}/{tanggal.strftime('%Y%m%d')}_{coachee['Nama'].replace(' ', '_')}.png"
-            with open(image_filename, "wb") as f:
-                f.write(foto.getbuffer())
-
+    if submitted:
         new_entry = {
             "Tanggal": tanggal.strftime("%Y-%m-%d"),
             "Lokasi": lokasi,
@@ -127,35 +109,20 @@ with st.form("psd_form", clear_on_submit=True):
             **{f"Q{i+1}": jawaban[i] for i in range(len(jawaban))},
             "Diskusi Umum": diskusi,
             "Saran & Komitmen": saran,
-            "Foto": image_filename
+            "Waktu Submit": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        append_data_to_sheet(new_entry)
+        st.success("✅ Data berhasil dikirim ke Google Sheets.")
 
-        df_new = pd.DataFrame([new_entry])
-        if os.path.exists(DATA_CSV):
-            df_existing = pd.read_csv(DATA_CSV)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_combined = df_new
-
-        df_combined.to_csv(DATA_CSV, index=False)
-        st.success("Data berhasil disimpan.")
-
-# Dashboard admin
+# === DASHBOARD ===
 if is_authorized:
-    st.header("📊 Dashboard & Manajemen Data")
-    if os.path.exists(DATA_CSV):
-        df = pd.read_csv(DATA_CSV)
-        st.dataframe(df.drop(columns=["Foto"]), use_container_width=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button("📥 Download Excel", data=create_excel_file(df), file_name="data_psd.xlsx")
-        with col2:
-            with st.expander("🔧 Hapus semua data?"):
-                if st.button("Hapus data CSV"):
-                    os.remove(DATA_CSV)
-                    st.success("Data berhasil dihapus.")
+    st.subheader("📊 Dashboard PSD")
+    df = get_data_as_dataframe()
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+        excel_data = create_excel(df)
+        st.download_button("⬇️ Download Excel", data=excel_data, file_name="rekap_psd.xlsx")
     else:
         st.info("Belum ada data.")
 else:
-    st.info("Login dengan email resmi untuk akses dashboard.")
+    st.info("Login dengan email admin untuk akses dashboard.")
