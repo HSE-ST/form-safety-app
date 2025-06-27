@@ -1,24 +1,22 @@
-# Personal Safety Discussion App (Google Sheets Version)
+# Personal Safety Discussion App (Google Sheets Version - FIXED)
 import streamlit as st
 import pandas as pd
-import json
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import json
 from datetime import datetime
 from io import BytesIO
 import xlsxwriter
 
+# ============ CONFIG ============
 st.set_page_config(page_title="Personal Safety Discussion", page_icon="🛡️", layout="wide")
 
 AUTHORIZED_EMAIL = "hset.mbma@sinarterangmandiri.com"
 SPREADSHEET_ID = "1oAEnIloBQqY2rv_b7_0_djkHmCKytjUOlqvQAYfKIIA"
 SHEET_NAME = "data"
 
-# Load credentials from Streamlit secrets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# ============ GOOGLE AUTH ============
 creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(creds)
+client = gspread.service_account_from_dict(creds_dict)
 sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
 # Session state for login
